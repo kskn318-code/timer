@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>じかんの箱 v5</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@700&display=swap');
+        body { font-family: 'Zen Maru Gothic', sans-serif; transition: background 2s ease; overflow: hidden; touch-action: manipulation; }
+        .bg-prep { background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%); }
+        .bg-free { background: linear-gradient(135deg, #1e3a8a 0%, #4c1d95 100%); color: white; }
+        .box-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; width: 95%; max-width: 900px; margin: 0 auto; transition: filter 0.5s ease; }
+        .blur-bg { filter: blur(10px) brightness(0.7); }
+        .box-svg { width: 100%; height: auto; transition: opacity 0.5s ease; }
+        .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 50; background: rgba(0, 0, 0, 0.05); }
+        .huge-btn { font-size: min(8vw, 3rem); padding: 2rem 4rem; border-radius: 100px; box-shadow: 0 15px 40px rgba(0,0,0,0.2); transition: transform 0.1s; }
+        .particle { position: absolute; pointer-events: none; animation: shoot 1.2s ease-out forwards; z-index: 60; }
+        @keyframes shoot { 0% { transform: translate(0, 0) scale(1); opacity: 1; } 100% { transform: translate(var(--tw-x), var(--tw-y)) scale(0); opacity: 0; } }
+        .settings-gear { opacity: 0.2; cursor: pointer; z-index: 100; padding: 20px; position: absolute; top: 0; right: 0; }
+        .setting-btn { width: 100%; padding: 1.2rem; border-radius: 1rem; font-weight: bold; font-size: 1.1rem; }
+    </style>
+</head>
+<body class="bg-prep min-h-screen flex flex-col items-center p-4">
+
+    <div class="settings-gear text-4xl" id="settings-btn">⚙️</div>
+
+    <div class="w-full flex justify-between items-start mb-2 px-4 z-10">
+        <div id="clock" class="text-5xl font-bold tracking-tighter text-pink-700">00:00</div>
+        <div class="text-right">
+            <div class="text-xl opacity-80 font-bold">ねるじかん</div>
+            <div id="display-target-time" class="text-3xl font-black text-pink-800">20:40</div>
+        </div>
+    </div>
+
+    <div id="main-content" class="flex-grow flex flex-col items-center justify-center w-full">
+        <h1 id="status-label" class="text-2xl font-bold mb-6 text-center h-8"></h1>
+        <div id="box-area" class="box-grid"></div>
+    </div>
+
+    <div id="overlay-layer" class="overlay">
+        <button id="action-btn" class="huge-btn bg-white text-pink-500 font-black">
+            おうちに ついたよ！
+        </button>
+    </div>
+
+    <div id="parent-modal" class="hidden fixed inset-0 bg-black/80 z-[110] flex items-center justify-center">
+        <div class="bg-white text-black p-8 rounded-3xl w-[90%] max-w-md flex flex-col gap-6 shadow-2xl">
+            <h2 class="text-2xl font-bold text-center border-b pb-2">設定</h2>
+            <div class="flex flex-col gap-2">
+                <p class="text-sm font-bold text-gray-500 text-center">ねるじかん を かえる</p>
+                <div class="flex items-center justify-between bg-gray-100 p-4 rounded-xl">
+                    <button id="time-minus" class="bg-white w-14 h-14 rounded-xl shadow text-2xl font-bold">-</button>
+                    <span id="modal-target-time" class="text-3xl font-mono font-bold">20:40</span>
+                    <button id="time-plus" class="bg-white w-14 h-14 rounded-xl shadow text-2xl font-bold">+</button>
+                </div>
+            </div>
+            <div class="flex flex-col gap-3">
+                <button id="bonus-btn" class="setting-btn bg-yellow-400 text-yellow-900">🎁 箱を1個ふやす (+10分)</button>
+                <button onclick="location.reload()" class="setting-btn bg-red-100 text-red-600">🔄 最初からやりなおす</button>
+                <button id="close-modal" class="setting-btn bg-gray-200 text-gray-600">とじる</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let targetHours = 20, targetMinutes = 40, mode = 'waiting', targetDate = new Date();
+        const clockEl = document.getElementById('clock'), actionBtn = document.getElementById('action-btn'), overlay = document.getElementById('overlay-layer');
+        const boxArea = document.getElementById('box-area'), statusLabel = document.getElementById('status-label'), displayTargetTime = document.getElementById('display-target-time');
+        const modalTargetTime = document.getElementById('modal-target-time'), modal = document.getElementById('parent-modal');
+
+        const BOX_SVG = `<svg viewBox="0 0 100 100" class="box-svg"><rect x="15" y="35" width="70" height="50" fill="#F472B6" rx="5" /><rect x="10" y="25" width="80" height="15" fill="#FB7185" rx="5" /><rect x="42" y="25" width="16" height="60" fill="#FFE4E6" /><path d="M50 25 C30 0 10 25 50 25 C90 0 70 25 50 25" fill="none" stroke="#FFE4E6" stroke-width="8" stroke-linecap="round" /></svg>`;
+
+        function updateTargetDate() {
+            targetDate = new Date(); targetDate.setHours(targetHours, targetMinutes, 0, 0);
+            const timeStr = `${String(targetHours).padStart(2, '0')}:${String(targetMinutes).padStart(2, '0')}`;
+            displayTargetTime.textContent = timeStr; modalTargetTime.textContent = timeStr;
+            if (mode === 'free') displayTargetTime.classList.replace('text-pink-800', 'text-white');
+        }
+
+        function speak(msg) {
+            window.speechSynthesis.cancel();
+            const uttr = new SpeechSynthesisUtterance(msg); uttr.lang = 'ja-JP';
+            uttr.volume = (new Date().getHours() >= 20) ? 0.4 : 1.0;
+            window.speechSynthesis.speak(uttr);
+        }
+
+        function update() {
+            const now = new Date();
+            clockEl.textContent = now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes().toString().padStart(2, '0');
+            if (mode === 'waiting') return;
+            const diff = (targetDate - now) / 60000;
+            if (diff <= 0) {
+                renderBoxes(0); statusLabel.textContent = "おやすみなさい";
+                if (mode !== 'finished') { speak("箱が全部なくなりました。おやすみ。"); mode = 'finished'; }
+                return;
+            }
+            renderBoxes(diff);
+        }
+
+        function renderBoxes(totalMinutes) {
+            boxArea.innerHTML = ''; const count = Math.ceil(totalMinutes / 10);
+            for (let i = 0; i < count; i++) {
+                const wrapper = document.createElement('div'); wrapper.innerHTML = BOX_SVG;
+                const svg = wrapper.querySelector('svg');
+                if (i === count - 1) { const remainder = totalMinutes % 10 || 10; svg.style.opacity = Math.max(0.1, remainder / 10); }
+                boxArea.appendChild(svg);
+            }
+        }
+
+        actionBtn.onclick = () => {
+            if (mode === 'waiting') {
+                mode = 'prep'; overlay.classList.add('hidden'); boxArea.classList.remove('blur-bg');
+                statusLabel.textContent = "じゅんびを はやく おわらせよう！";
+                const diffCount = Math.ceil((targetDate - new Date()) / 60000 / 10);
+                speak(`今の箱は${diffCount}個だよ。急げば箱が残るよ！`);
+                setTimeout(() => {
+                    actionBtn.textContent = "じゆうじかん スタート！"; actionBtn.classList.replace('text-pink-500', 'text-blue-600');
+                    overlay.classList.remove('hidden'); boxArea.classList.add('blur-bg');
+                }, 1500);
+            } else if (mode === 'prep') {
+                mode = 'free'; overlay.classList.add('hidden'); boxArea.classList.remove('blur-bg');
+                document.body.classList.replace('bg-prep', 'bg-free'); clockEl.classList.replace('text-pink-700', 'text-white');
+                statusLabel.textContent = "じゆうじかん！ たっぷり あそぼう！";
+                for (let i = 0; i < 30; i++) {
+                    const p = document.createElement('div'); p.className = 'particle'; p.innerHTML = '⭐';
+                    p.style.left = '50vw'; p.style.top = '50vh';
+                    p.style.setProperty('--tw-x', (Math.random() - 0.5) * 800 + 'px'); p.style.setProperty('--tw-y', (Math.random() - 0.5) * 800 + 'px');
+                    document.body.appendChild(p); setTimeout(() => p.remove(), 1200);
+                }
+                const diffCount = Math.ceil((targetDate - new Date()) / 60000 / 10);
+                speak(`自由時間は、箱${diffCount}個だよ！たっぷり遊ぼうね！`);
+            }
+        };
+
+        document.getElementById('settings-btn').onclick = () => modal.classList.remove('hidden');
+        document.getElementById('close-modal').onclick = () => modal.classList.add('hidden');
+        function adjustTargetTime(min) {
+            let total = targetHours * 60 + targetMinutes + min;
+            targetHours = Math.floor(total / 60); targetMinutes = total % 60;
+            updateTargetDate(); update();
+        }
+        document.getElementById('time-plus').onclick = () => adjustTargetTime(5);
+        document.getElementById('time-minus').onclick = () => adjustTargetTime(-5);
+        document.getElementById('bonus-btn').onclick = () => { adjustTargetTime(10); speak("箱が増えたよ！"); modal.classList.add('hidden'); };
+
+        updateTargetDate(); setInterval(update, 1000); boxArea.classList.add('blur-bg'); update();
+    </script>
+</body>
+</html>
